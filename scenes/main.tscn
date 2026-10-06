@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=25 format=3]
 
 [ext_resource type="Script" path="res://scripts/yard.gd" id="1_yard"]
 [ext_resource type="Script" path="res://scripts/goal.gd" id="2_goal"]
@@ -12,6 +12,7 @@
 [ext_resource type="AudioStream" path="res://audio/bounce.wav" id="10_bounce"]
 [ext_resource type="AudioStream" path="res://audio/post.wav" id="11_post"]
 [ext_resource type="AudioStream" path="res://audio/whistle.wav" id="12_whistle"]
+[ext_resource type="Script" path="res://scripts/teammate.gd" id="13_teammate"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.33, 0.45, 0.68, 1)
@@ -129,13 +130,14 @@ ball = NodePath("../Ball")
 stream = ExtResource("12_whistle")
 volume_db = -6.0
 
-[node name="Player" type="CharacterBody3D" parent="." node_paths=PackedStringArray("ball")]
+[node name="Player" type="CharacterBody3D" parent="." node_paths=PackedStringArray("ball", "teammate")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)
 collision_layer = 2
-collision_mask = 1
+collision_mask = 3
 floor_snap_length = 0.2
 script = ExtResource("3_player")
 ball = NodePath("../Ball")
+teammate = NodePath("../Teammate")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
@@ -149,6 +151,31 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, -0.5)
 stream = ExtResource("9_kick")
 unit_size = 12.0
 
+[node name="Teammate" type="CharacterBody3D" parent="." node_paths=PackedStringArray("ball", "partner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
+collision_layer = 2
+collision_mask = 3
+floor_snap_length = 0.2
+script = ExtResource("13_teammate")
+ball = NodePath("../Ball")
+partner = NodePath("../Player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Teammate"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("player_shape")
+
+[node name="Model" type="Node3D" parent="Teammate"]
+script = ExtResource("4_model")
+shirt_color = Color(0.18, 0.42, 0.85, 1)
+shorts_color = Color(0.15, 0.15, 0.17, 1)
+skin_color = Color(0.85, 0.66, 0.52, 1)
+hair_color = Color(0.75, 0.6, 0.3, 1)
+
+[node name="KickSound" type="AudioStreamPlayer3D" parent="Teammate"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, -0.5)
+stream = ExtResource("9_kick")
+unit_size = 12.0
+
 [node name="Ball" type="RigidBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
 collision_layer = 4
@@ -158,6 +185,8 @@ physics_material_override = SubResource("ball_phys")
 continuous_cd = true
 contact_monitor = true
 max_contacts_reported = 4
+linear_damp_mode = 1
+angular_damp_mode = 1
 script = ExtResource("5_ball")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ball"]
@@ -229,7 +258,7 @@ offset_top = -40.0
 offset_right = 1200.0
 offset_bottom = -12.0
 grow_vertical = 0
-text = "WASD / стик — бег   Shift / RT — ускорение   Пробел / A — удар (держи — сильнее)   R / Y — мяч к себе"
+text = "WASD / стик — бег   Shift / RT — ускорение   Пробел / B — удар (держи — сильнее)   E / A — пас   R / Y — мяч к себе"
 label_settings = SubResource("hint_text")
 
 [connection signal="scored" from="Goal" to="HUD" method="show_goal"]

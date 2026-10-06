@@ -8,7 +8,7 @@ extends RigidBody3D
 ## Постоянное замедление при качении по асфальту, м/с².
 @export var rolling_resistance := 0.9
 ## Добавочное замедление, пропорциональное скорости при качении, 1/с.
-@export var rolling_damping := 0.3
+@export var rolling_damping := 0.4
 ## Сопротивление воздуха (замедление = k * v²).
 @export var air_drag := 0.008
 ## Минимальная скорость удара о поверхность для звука, м/с.
@@ -18,6 +18,8 @@ extends RigidBody3D
 
 ## Увеличивается при каждой телепортации — чтобы ворота не приняли её за пролёт.
 var teleport_id := 0
+## Кто последним держал мяч у ног (чтобы игроки не отбирали мяч друг у друга).
+var controller: Footballer
 
 var _pending_reset := false
 var _reset_position := Vector3.ZERO
@@ -45,14 +47,42 @@ func _physics_process(delta: float) -> void:
 func kick(velocity: Vector3) -> void:
 	sleeping = false
 	linear_velocity = velocity
-	# Без закрутки: иначе трение о борт подбрасывает мяч вверх.
-	angular_velocity = Vector3.ZERO
+	# Низкий мяч сразу катится без проскальзывания, иначе трение съедает скорость паса.
+	# Верховой — без закрутки, иначе трение о борт подбрасывает его вверх.
+	if absf(velocity.y) < 0.5:
+		angular_velocity = Vector3.UP.cross(Vector3(velocity.x, 0.0, velocity.z)) / radius
+	else:
+		angular_velocity = Vector3.ZERO
 
 
 ## Касание при ведении: задаёт горизонтальную скорость, вертикальную не трогает.
 func touch(horizontal_velocity: Vector3) -> void:
 	sleeping = false
 	linear_velocity = Vector3(horizontal_velocity.x, linear_velocity.y, horizontal_velocity.z)
+
+
+## С какой скоростью катнуть мяч, чтобы через distance метров он катился со скоростью arrive_speed.
+func speed_to_roll(distance: float, arrive_speed: float) -> float:
+	var lo := arrive_speed
+	var hi := 40.0
+	for i in 24:
+		var mid := (lo + hi) * 0.5
+		if _roll_distance(mid, arrive_speed) < distance:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) * 0.5
+
+
+## Путь катящегося мяча при замедлении от v0 до v1 (та же модель, что в _integrate_forces).
+func _roll_distance(v0: float, v1: float) -> float:
+	var dt := 1.0 / 60.0
+	var v := v0
+	var dist := 0.0
+	while v > v1 and dist < 200.0:
+		v -= (rolling_resistance + rolling_damping * v + air_drag * v * v) * dt
+		dist += maxf(v, v1) * dt
+	return dist
 
 
 func reset_to(pos: Vector3) -> void:
@@ -68,17 +98,21 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
 		_last_velocity = Vector3.ZERO
+		controller = null
 		teleport_id += 1
 		reset_physics_interpolation.call_deferred()
 		return
 
 	var dt := state.step
 	var v := state.linear_velocity
+	# Катится — только если касается пола и не подпрыгивает (иначе в первый кадр
+	# после верхового удара мяч получил бы закрутку качения).
 	var grounded := false
-	for i in state.get_contact_count():
-		if state.get_contact_local_normal(i).y > 0.7:
-			grounded = true
-			break
+	if absf(v.y) < 0.5:
+		for i in state.get_contact_count():
+			if state.get_contact_local_normal(i).y > 0.7:
+				grounded = true
+				break
 
 	v -= v * v.length() * air_drag * dt
 
@@ -91,7 +125,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		v.x = flat.x
 		v.z = flat.z
 		# Вращение соответствует качению без проскальзывания.
-		state.angular_velocity = state.angular_velocity.lerp(Vector3.UP.cross(flat) / radius, 0.3)
+		state.angular_velocity = Vector3.UP.cross(flat) / radius
 
 	state.linear_velocity = v
 	_last_velocity = v
